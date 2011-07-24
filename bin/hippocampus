@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+
+var hippocampus = require('hippocampus');
+var scanner = require('hippocampus/scanner');
+var parser = require('hippocampus/parser');
+var vm = require('vm');
+var util = require('util');
+
+var PROMPT = 'hippocampus> '
+
+function compileExpressions (source, optionalFilename, optionalIndentation, cb) {
+  var indent = optionalIndentation || 2;
+  var tokens = scanner.tokenize(source);
+  while ( tokens.length > 0 ) {
+    cb((new parser.Expression(tokens, optionalFilename)).compile(false, 0, optionalIndentation));
+  }
+}
+
+if ( process.argv.length > 2 ) {
+  if ( process.argv[2] === '--' ) {
+    process.stdout.write(new Buffer(hippocampus.compileFileSync('/dev/stdin')));
+    process.stdout.write(new Buffer('\n'));
+  } else {
+    process.argv.slice(2).forEach(function (f) {
+      process.stdout.write(new Buffer('// ' + f + '\n'));
+      try {
+        process.stdout.write(new Buffer(hippocampus.compileFileSync(f)));
+        process.stdout.write(new Buffer('\n'));
+      } catch (e) {
+        console.error(e.stack);
+      }
+    });
+  }
+} else {
+  function loop (data) {
+    try {
+      compileExpressions(data, '(repl)', 2, function (code) {
+        process.stderr.write(new Buffer(code));
+        process.stderr.write(new Buffer('\n'));
+        process.stdout.write(new Buffer(util.inspect(vm.runInThisContext(code))), false, 4);
+        process.stdout.write(new Buffer('\n'));
+      });
+    } catch (e) {
+      console.error(e.stack);
+    }
+    process.stderr.write(PROMPT);
+  }
+
+  var stdin = process.openStdin();
+  stdin.setEncoding('utf8');
+  stdin.on('data', loop);
+
+  process.stderr.write(PROMPT);
+}
